@@ -85,3 +85,10 @@ export const getUserProfile = async(req, res) =>{
 };
 
 
+export const getUserPoints = async(req, res) =>{
+    const user = await User.findById(req.user._id);
+    res.json(user.points);
+};
+
+
+    

@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, loginUser, logoutUser, adminLogin } from "../controllers/user.controller.js";
+import { getUserPoints,registerUser, loginUser, logoutUser, adminLogin } from "../controllers/user.controller.js";
 import { protect, authorize } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
@@ -15,6 +15,8 @@ router.post("/logout", logoutUser);
 router.get("/profile", protect, (req, res) => {
     res.json(req.user);
 });
+
+router.get("/points", protect, getUserPoints);
 
 // Admin routes
 router.get("/admin/dashboard", protect, authorize("admin"), (req, res) => {

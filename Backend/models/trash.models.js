@@ -17,13 +17,17 @@ const trashSchema = new mongoose.Schema({
     workerAssigned:{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Worker",
+        default: null,
+    },
+    cleanedAt:{
+        type: Date,
     },
     status:{
         type: String,
         enum: ["pending", "completed", "cancelled"],
         default: "pending",
     },
-});
+}, {timestamps: true});
 
 const Trash = mongoose.model("Trash", trashSchema);
 
