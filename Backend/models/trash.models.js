@@ -19,6 +19,9 @@ const trashSchema = new mongoose.Schema({
         ref: "Worker",
         default: null,
     },
+    reportedAt:{
+        type: Date,
+    },
     cleanedAt:{
         type: Date,
     },

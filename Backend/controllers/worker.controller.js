@@ -1,25 +1,25 @@
 import Worker from "../models/worker.models.js";
-import Trash from "../models/trash.models.js"
+import Trash from "../models/trash.models.js";
 
+// Register a worker
 export const registerWorker = async (req, res) => {
-    const {name, email} = req.body;
-
+    const { name, email } = req.body;
     try {
-        const newWorker = new Worker({name, email});
+        const newWorker = new Worker({ name, email });
         await newWorker.save();
         res.status(201).json({
-            message : "Worker registration successful" ,
-            worker : newWorker
+            message: "Worker registration successful",
+            worker: newWorker,
         });
     } catch (error) {
         res.status(500).json({
-            message : "Error worker registration" ,error
+            message: "Error in worker registration",
+            error: error.message,
         });
     }
 };
 
-//Assign worker to trash
-
+// Assign worker to trash
 export const assignedWorker = async (req, res) => {
     const { workerId, trashId } = req.body;
 
@@ -27,9 +27,9 @@ export const assignedWorker = async (req, res) => {
         const worker = await Worker.findById(workerId);
         const trash = await Trash.findById(trashId);
 
-        if(!worker || ! trash){
-            res.status(404).json({
-                message : "Worker or trash not found"
+        if (!worker || !trash) {
+            return res.status(404).json({
+                message: "Worker or trash not found",
             });
         }
 
@@ -42,28 +42,32 @@ export const assignedWorker = async (req, res) => {
         res.status(200).json({
             message: "Worker successfully assigned to trash",
             trash,
-            worker
+            worker,
         });
-        
     } catch (error) {
         res.status(500).json({
-            message : "Error in worker assignment" ,error
+            message: "Error in worker assignment",
+            error: error.message,
         });
     }
-}
+};
 
-export const getWorkerReports = async (req,res) => {
+// Get all reports assigned to a worker
+export const getWorkerReports = async (req, res) => {
     try {
         const worker = await Worker.findById(req.params.id).populate("tasks");
-        if(!worker) {
+        if (!worker) {
             return res.status(404).json({ message: "Worker not found" });
         }
 
         res.status(200).json({
             message: "Worker reports fetched successfully",
-            reports: worker.tasks
+            reports: worker.tasks,
         });
     } catch (error) {
-        res.status(500).json({ message: "Error fetching reports", error });
+        res.status(500).json({
+            message: "Error fetching reports",
+            error: error.message,
+        });
     }
-}
+};

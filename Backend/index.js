@@ -1,6 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
-import { connectDB } from "./database/db.js";
+import { connectDB } from "./utils/db.js";
 import cors from "cors";
 import userRoutes from "./routes/userRoutes.js";
 import trashRoutes from "./routes/trashRoutes.js";
