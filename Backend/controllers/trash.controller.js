@@ -95,3 +95,61 @@ export const getUserTrashReports = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch user trash reports", error });
   }
 };
+
+
+export const getAvailableTrash = async (req, res) => {
+    try {
+      const trash = await Trash.find({ status: "pending", volunteer: null });
+      res.json(trash);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch available trash", error });
+    }
+  };
+  
+  export const volunteerForTrash = async (req, res) => {
+    const { trashId } = req.params;
+  
+    try {
+      const trash = await Trash.findById(trashId);
+      if (!trash) {
+        return res.status(404).json({ message: "Trash not found" });
+      }
+  
+      if (trash.status !== "pending") {
+        return res.status(400).json({ message: "Trash already assigned" });
+      }
+  
+      trash.volunteer = req.user._id;
+      trash.status = "assigned";
+      await trash.save();
+  
+      res.json({ message: "You are now assigned to clean this trash!", trash });
+    } catch (error) {
+      res.status(500).json({ message: "Error assigning volunteer", error });
+    }
+  };
+  
+
+  export const volunteerMarkCleaned = async (req, res) => {
+    const { trashId } = req.params;
+  
+    try {
+      const trash = await Trash.findById(trashId);
+      if (!trash || !trash.volunteer.equals(req.user._id)) {
+        return res.status(403).json({ message: "Not allowed" });
+      }
+  
+      trash.status = "completed";
+      trash.cleanedAt = new Date();
+      await trash.save();
+  
+      const user = await User.findById(req.user._id);
+      user.points += 15; // Bonus points for volunteering
+      await user.save();
+  
+      res.json({ message: "Trash marked as cleaned by volunteer", trash });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to mark trash as cleaned", error });
+    }
+  };
+  

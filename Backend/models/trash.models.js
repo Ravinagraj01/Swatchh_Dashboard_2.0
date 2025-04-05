@@ -27,9 +27,14 @@ const trashSchema = new mongoose.Schema({
     },
     status:{
         type: String,
-        enum: ["pending", "completed", "cancelled"],
+        enum: ["pending", "completed","assigned" ,"cancelled"],
         default: "pending",
     },
+    volunteer: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null
+      },      
 }, {timestamps: true});
 
 const Trash = mongoose.model("Trash", trashSchema);
