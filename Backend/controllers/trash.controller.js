@@ -12,11 +12,12 @@ export const reportTrash = async (req, res) => {
       });
       
       // After saving the trash report:
-        const user = await User.findById(req.body.reportedBy);
+        const user = await User.findById(req.user._id);
+        await newTrash.save();
         user.points += 5;
         await user.save();
 
-      await newTrash.save();
+      
       res.status(201).json(newTrash);
     } catch (error) {
       res.status(500).json({ message: "Failed to report trash", error });
@@ -25,7 +26,7 @@ export const reportTrash = async (req, res) => {
   
   export const getAllTrashReports = async (req, res) => {
     try {
-      const reports = await Trash.find().populate('user', 'name email');
+      const reports = await Trash.find().populate('workerAssigned');
       res.json(reports);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch trash reports", error });

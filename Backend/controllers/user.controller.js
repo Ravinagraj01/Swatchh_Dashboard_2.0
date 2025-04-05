@@ -11,6 +11,11 @@ export const registerUser = async (req, res) => {
             message: "User already exists",
         });
     }
+    // In registerUser or other async functions:
+    if (!name || !email || !password) {
+        return res.status(400).json({ message: "Please fill all fields" });
+    }
+  
 
     const user = await User.create({
         name,
@@ -81,7 +86,14 @@ export const logoutUser = async(req, res) =>{
 
 export const getUserProfile = async(req, res) =>{
     const user = await User.findById(req.user._id);
-    res.json(user);
+    res.json({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        points: user.points
+      });
+      
 };
 
 

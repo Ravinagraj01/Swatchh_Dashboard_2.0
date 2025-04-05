@@ -19,7 +19,13 @@ const reportSchema = new mongoose.Schema({
         type: String,
         enum: ["pending", "resolved", "rejected"],
         default: "pending",
-    }    
+    },
+    assignedTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Worker",
+        default: null,
+      }
+        
 },{timestamps: true});
 
 const Report = mongoose.model("Report", reportSchema);

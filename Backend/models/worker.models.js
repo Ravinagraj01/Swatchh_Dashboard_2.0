@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Report from "./reports.models.js";
 
 const workerSchema = new mongoose.Schema({
     name: {
@@ -10,17 +11,17 @@ const workerSchema = new mongoose.Schema({
         required: true,
         unique: true,
     },
-    password: {
-        type: String,
-        required: true,
-    },
+    // password: {
+    //     type: String,
+    //     required: true,
+    // },
     tasks:{
         type: [mongoose.Schema.Types.ObjectId],
-        ref: "Task",
+        ref: "Trash",
     },
     tasksCompleted:{
         type: [mongoose.Schema.Types.ObjectId],
-        ref: "Task",
+        ref: "Trash",
     },
     
 });
