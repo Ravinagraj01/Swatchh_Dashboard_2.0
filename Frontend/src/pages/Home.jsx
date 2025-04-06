@@ -7,6 +7,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from "recharts";
+import { ResponsiveContainer } from "recharts";
 
 // Fix for Leaflet marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -36,31 +37,81 @@ export default function Home() {
       try {
         setLoading(true);
         
-        // Fetch cleaned locations
-        const locationsRes = await axios.get("http://localhost:5000/api/trash/cleaned");
-        setCleanedLocations(locationsRes.data);
+        // Get token for authenticated requests
+        const token = localStorage.getItem("token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        
+        // Fetch all trash reports and filter for completed ones
+        const reportsRes = await axios.get("http://localhost:5000/api/trash/all", { headers });
+        const completedReports = reportsRes.data.filter(report => report.status === "completed");
+        setCleanedLocations(completedReports);
         
         // Set map center based on first location if available
-        if (locationsRes.data.length > 0) {
-          setMapCenter([locationsRes.data[0].latitude, locationsRes.data[0].longitude]);
+        if (completedReports.length > 0) {
+          setMapCenter([completedReports[0].latitude, completedReports[0].longitude]);
         }
         
         // Fetch statistics
-        const weeklyRes = await axios.get("http://localhost:5000/api/trash/stats/weekly");
-        const monthlyRes = await axios.get("http://localhost:5000/api/trash/stats/monthly");
-        const yearlyRes = await axios.get("http://localhost:5000/api/trash/stats/yearly");
-        const categoryRes = await axios.get("http://localhost:5000/api/trash/stats/category");
-        
-        setStatistics({
-          weekly: weeklyRes.data,
-          monthly: monthlyRes.data,
-          yearly: yearlyRes.data,
-          category: categoryRes.data
-        });
+        try {
+          const statsRes = await axios.get("http://localhost:5000/api/trash/stats", { headers });
+          setStatistics(statsRes.data);
+        } catch (statsErr) {
+          console.error("Error fetching statistics:", statsErr);
+          // If stats endpoint doesn't exist, calculate from reports
+          const today = new Date();
+          const lastWeek = new Date(today);
+          lastWeek.setDate(lastWeek.getDate() - 7);
+          
+          // Calculate weekly stats
+          const weeklyStats = [];
+          const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          
+          for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            const dayName = days[date.getDay()];
+            
+            const count = completedReports.filter(report => {
+              const reportDate = new Date(report.completedAt);
+              return reportDate.toDateString() === date.toDateString();
+            }).length;
+            
+            weeklyStats.push({ day: dayName, count });
+          }
+          
+          // Calculate category stats
+          const categoryCounts = {};
+          completedReports.forEach(report => {
+            if (report.category) {
+              categoryCounts[report.category] = (categoryCounts[report.category] || 0) + 1;
+            }
+          });
+          
+          const categoryStats = Object.entries(categoryCounts).map(([name, value]) => ({
+            name,
+            value
+          }));
+          
+          setStatistics({
+            weekly: weeklyStats,
+            monthly: [],
+            yearly: [],
+            category: categoryStats
+          });
+        }
         
         // Fetch recent reports
-        const reportsRes = await axios.get("http://localhost:5000/api/trash/recent");
-        setRecentReports(reportsRes.data);
+        try {
+          const recentRes = await axios.get("http://localhost:5000/api/trash/recent", { headers });
+          setRecentReports(recentRes.data);
+        } catch (recentErr) {
+          console.error("Error fetching recent reports:", recentErr);
+          // If recent endpoint doesn't exist, use the most recent reports
+          const sortedReports = [...reportsRes.data].sort((a, b) => 
+            new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          setRecentReports(sortedReports.slice(0, 5));
+        }
       } catch (err) {
         console.error("Error fetching data:", err);
         setError("Failed to load data. Please try again later.");
@@ -105,47 +156,66 @@ export default function Home() {
       <div className="max-w-6xl mx-auto px-4 py-12">
         <h2 className="text-3xl font-bold mb-8 text-gray-800">Statistics</h2>
         
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
-          <div className="bg-white p-6 rounded-xl shadow-md">
+        {error && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <p className="text-yellow-700">{error}</p>
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Weekly Statistics */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-xl font-semibold mb-4 text-gray-700">Weekly Cleaned Trash</h3>
             <div className="h-64">
-              <BarChart
-                width={500}
-                height={250}
-                data={statistics.weekly}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="cleaned" fill="#10B981" />
-              </BarChart>
+              {statistics.weekly.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={statistics.weekly}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="count" fill="#10B981" name="Cleaned Items" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-gray-500">No data available</p>
+                </div>
+              )}
             </div>
           </div>
           
-          <div className="bg-white p-6 rounded-xl shadow-md">
+          {/* Category Statistics */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-xl font-semibold mb-4 text-gray-700">Trash by Category</h3>
-            <div className="h-64 flex items-center justify-center">
-              <PieChart width={400} height={250}>
-                <Pie
-                  data={statistics.category}
-                  cx={200}
-                  cy={125}
-                  labelLine={false}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {statistics.category.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
+            <div className="h-64">
+              {statistics.category.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statistics.category}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {statistics.category.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-gray-500">No data available</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -154,11 +224,11 @@ export default function Home() {
       {/* Map Section */}
       <div className="max-w-6xl mx-auto px-4 py-12">
         <h2 className="text-3xl font-bold mb-8 text-gray-800">Cleaned Locations</h2>
-        <div className="bg-white p-6 rounded-xl shadow-md">
-          <div className="h-96 w-full">
-            <MapContainer 
-              center={mapCenter} 
-              zoom={5} 
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <div className="h-96">
+            <MapContainer
+              center={mapCenter}
+              zoom={5}
               style={{ height: "100%", width: "100%" }}
             >
               <TileLayer
@@ -166,15 +236,16 @@ export default function Home() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               />
               {cleanedLocations.map((location) => (
-                <Marker 
-                  key={location._id} 
+                <Marker
+                  key={location._id}
                   position={[location.latitude, location.longitude]}
                 >
                   <Popup>
                     <div>
-                      <h3 className="font-semibold">{location.location}</h3>
-                      <p>Cleaned on: {new Date(location.cleanedAt).toLocaleDateString()}</p>
-                      <p>Category: {location.category}</p>
+                      <h3 className="font-bold">{location.location}</h3>
+                      <p>Category: {location.category || "Not specified"}</p>
+                      <p>Status: {location.status}</p>
+                      <p>Completed: {location.completedAt ? new Date(location.completedAt).toLocaleDateString() : "Unknown"}</p>
                     </div>
                   </Popup>
                 </Marker>
@@ -187,36 +258,61 @@ export default function Home() {
       {/* Recent Reports Section */}
       <div className="max-w-6xl mx-auto px-4 py-12">
         <h2 className="text-3xl font-bold mb-8 text-gray-800">Recent Reports</h2>
-        <div className="grid md:grid-cols-3 gap-6">
-          {recentReports.map((report) => (
-            <div key={report._id} className="bg-white rounded-xl shadow-md overflow-hidden">
-              <img 
-                src={report.image} 
-                alt="Trash" 
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
-                <h3 className="font-semibold text-lg mb-2">{report.location}</h3>
-                <p className="text-gray-600 mb-2">Category: {report.category}</p>
-                <p className="text-gray-500 text-sm">
-                  Reported: {new Date(report.createdAt).toLocaleDateString()}
-                </p>
-                <p className="text-gray-500 text-sm">
-                  Status: <span className={`font-semibold ${
-                    report.status === "completed" ? "text-green-600" : 
-                    report.status === "assigned" ? "text-blue-600" : "text-yellow-600"
-                  }`}>
-                    {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
-                  </span>
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="text-center mt-8">
-          <Link to="/login" className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700">
-            Login to Report Trash
-          </Link>
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Category
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Reported On
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {recentReports.length > 0 ? (
+                  recentReports.map((report) => (
+                    <tr key={report._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{report.location}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">{report.category || "Not specified"}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          report.status === "completed" 
+                            ? "bg-green-100 text-green-800" 
+                            : report.status === "assigned"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-yellow-100 text-yellow-800"
+                        }`}>
+                          {report.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(report.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                      No recent reports available
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

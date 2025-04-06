@@ -19,8 +19,6 @@ export default function MyReports() {
           navigate("/login");
           return;
         }
-
-        console.log("Fetching reports for user:", user._id);
         
         setLoading(true);
         const res = await axios.get(
@@ -32,11 +30,8 @@ export default function MyReports() {
           }
         );
         
-        console.log("Reports fetched:", res.data);
-        
         // Filter reports to ensure only the current user's reports are shown
         const userReports = res.data.filter(report => report.user === user._id);
-        console.log("Filtered user reports:", userReports);
         
         setReports(userReports);
       } catch (err) {
@@ -72,12 +67,29 @@ export default function MyReports() {
                 src={report.image}
                 alt="Trash"
                 className="w-full h-48 object-cover mb-2 rounded"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60";
+                }}
               />
               <p className="font-semibold">Location: {report.location}</p>
-              <p>Status: <span className="text-green-600">{report.status}</span></p>
+              <p>Status: <span className={`font-semibold ${
+                report.status === "completed" 
+                  ? "text-green-600" 
+                  : report.status === "assigned" 
+                    ? "text-blue-600" 
+                    : "text-yellow-600"
+              }`}>
+                {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
+              </span></p>
               <p className="text-sm text-gray-500">
                 Submitted: {new Date(report.createdAt).toLocaleString()}
               </p>
+              {report.category && (
+                <p className="text-sm text-gray-500">
+                  Category: {report.category}
+                </p>
+              )}
             </div>
           ))}
         </div>

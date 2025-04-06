@@ -3,12 +3,13 @@ import User from "../models/user.models.js";
 
 // POST /api/trash/report
 export const reportTrash = async (req, res) => {
-    const { location } = req.body;
+    const { location, category } = req.body;
     try {
       const newTrash = new Trash({
         user: req.user._id,
         image: req.file.path, // Cloudinary URL
-        location
+        location,
+        category: category || "other"
       });
   
       await newTrash.save();
@@ -31,8 +32,9 @@ export const reportTrash = async (req, res) => {
 export const getAllTrashReports = async (req, res) => {
   try {
     const reports = await Trash.find()
-      .populate("workerAssigned", "name email") // show basic worker info
-      .populate("user", "name email"); // optional: show reporter info
+      .populate("workerAssigned", "name email")
+      .populate("user", "name email")
+      .sort({ createdAt: -1 });
 
     res.json(reports);
   } catch (error) {
@@ -89,20 +91,15 @@ export const assignTrashToWorker = async (req, res) => {
 // GET /api/trash/user/:userId
 export const getUserTrashReports = async (req, res) => {
   try {
-    console.log("Fetching reports for user ID:", req.params.userId);
-    console.log("Authenticated user ID:", req.user._id);
-    
-    // Make sure we're only fetching reports for the authenticated user
     if (req.params.userId !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized to view these reports" });
     }
     
-    const reports = await Trash.find({ user: req.user._id });
-    console.log(`Found ${reports.length} reports for user ${req.user._id}`);
+    const reports = await Trash.find({ user: req.user._id })
+      .sort({ createdAt: -1 });
     
     res.json(reports);
   } catch (error) {
-    console.error("Error in getUserTrashReports:", error);
     res.status(500).json({ message: "Failed to fetch user trash reports", error: error.message });
   }
 };
@@ -110,7 +107,8 @@ export const getUserTrashReports = async (req, res) => {
 
 export const getAvailableTrash = async (req, res) => {
     try {
-      const trash = await Trash.find({ status: "pending", volunteer: null });
+      const trash = await Trash.find({ status: "pending", volunteer: null })
+        .sort({ createdAt: -1 });
       res.json(trash);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch available trash", error });

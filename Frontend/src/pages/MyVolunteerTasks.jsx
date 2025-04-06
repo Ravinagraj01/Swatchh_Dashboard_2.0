@@ -27,7 +27,7 @@ export default function MyVolunteerTasks() {
         
         // Fetch all reports and filter for those where the user is a volunteer
         const res = await axios.get(
-          `http://localhost:5000/api/trash/user/${user._id}`,
+          `http://localhost:5000/api/trash/all`,
           {
             headers: {
               'Authorization': `Bearer ${token}`
@@ -35,7 +35,7 @@ export default function MyVolunteerTasks() {
           }
         );
         
-        // Filter for reports where the user is a volunteer
+        // Filter for reports where the user is a volunteer and status is not completed
         const volunteerTasks = res.data.filter(report => 
           report.volunteer === user._id && report.status !== "completed"
         );
@@ -44,16 +44,36 @@ export default function MyVolunteerTasks() {
         setVolunteerTasks(volunteerTasks);
         
         // Fetch user points - using the correct endpoint
-        const pointsRes = await axios.get(
-          `http://localhost:5000/api/user/points`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
+        try {
+          const pointsRes = await axios.get(
+            `http://localhost:5000/api/user/points`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
             }
+          );
+          
+          setUserPoints(pointsRes.data || 0);
+        } catch (pointsErr) {
+          console.error("Error fetching user points:", pointsErr);
+          // If the points endpoint fails, try to get points from user profile
+          try {
+            const profileRes = await axios.get(
+              `http://localhost:5000/api/user/profile`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              }
+            );
+            
+            setUserPoints(profileRes.data.points || 0);
+          } catch (profileErr) {
+            console.error("Error fetching user profile:", profileErr);
+            setUserPoints(0);
           }
-        );
-        
-        setUserPoints(pointsRes.data || 0);
+        }
       } catch (err) {
         console.error("Error fetching volunteer tasks:", err);
         setError(err.response?.data?.message || "Failed to fetch volunteer tasks");
@@ -205,11 +225,11 @@ export default function MyVolunteerTasks() {
                 Category: {task.category || "Not specified"}
               </p>
               <p className="text-sm text-gray-500 mb-4">
-                Status: <span className="text-yellow-600">{task.status}</span>
+                Description: {task.description || "No description provided"}
               </p>
               <button
                 onClick={() => handleMarkAsCleaned(task._id)}
-                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full transition-colors"
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full"
                 disabled={markingCleaned}
               >
                 {markingCleaned ? "Marking as Cleaned..." : "Mark as Cleaned"}

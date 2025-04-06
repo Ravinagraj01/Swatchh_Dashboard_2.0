@@ -1,33 +1,38 @@
 import express from "express";
-import dotenv from "dotenv";
-import { connectDB } from "./utils/db.js";
+import mongoose from "mongoose";
 import cors from "cors";
+import dotenv from "dotenv";
 import userRoutes from "./routes/userRoutes.js";
 import trashRoutes from "./routes/trashRoutes.js";
 import workerRoutes from "./routes/workerRoutes.js";
 import statsRoutes from "./routes/statsRoutes.js";
-import contributionRoutes from "./routes/contributionRoutes.js";
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
-app.use(cors());
 
-connectDB();
+app.use(cors());
+app.use(express.json());
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log("Connected to MongoDB"))
+    .catch((err) => console.error("MongoDB connection error:", err));
 
 // Routes
-app.use("/api/users", userRoutes);
+app.use("/api/user", userRoutes);
 app.use("/api/trash", trashRoutes);
-app.use("/api/workers", workerRoutes);
-app.use("/api/stats", statsRoutes);
-app.use("/api/contributions", contributionRoutes);
+app.use("/api/worker", workerRoutes);
+app.use("/api/trash/stats", statsRoutes);
 
-app.get("/", (req, res) => {
-    res.send("Server is running");
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ message: "Something went wrong!", error: err.message });
 });
 
-app.listen(process.env.PORT, () => {
-    console.log(`Server is running on port ${process.env.PORT}`);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
 

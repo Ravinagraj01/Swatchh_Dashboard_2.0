@@ -1,280 +1,321 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { toast } from "react-toastify";
+import { FaTrash, FaUser, FaUserTie, FaMapMarkerAlt } from "react-icons/fa";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 
-export default function AdminDashboard() {
-  const [allTrash, setAllTrash] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [allWorkers, setAllWorkers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [selectedWorker, setSelectedWorker] = useState("");
-  const [assigning, setAssigning] = useState(false);
-  const navigate = useNavigate();
+// Fix for Leaflet marker icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+});
 
-  useEffect(() => {
-    const fetchAdminData = async () => {
-      try {
+const AdminDashboard = () => {
+    const navigate = useNavigate();
+    const [trashReports, setTrashReports] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [workers, setWorkers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [selectedWorker, setSelectedWorker] = useState("");
+    const [selectedTrash, setSelectedTrash] = useState("");
+    const [mapCenter, setMapCenter] = useState([20.5937, 78.9629]); // India center
+
+    useEffect(() => {
         const token = localStorage.getItem("token");
         const user = JSON.parse(localStorage.getItem("user"));
-        
+
         if (!token || !user || user.role !== "admin") {
-          setError("Unauthorized access");
-          navigate("/login");
-          return;
+            navigate("/login");
+            return;
         }
 
-        setLoading(true);
-        
-        // Fetch all trash reports
-        const trashRes = await axios.get(
-          "http://localhost:5000/api/trash/all",
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
+        const fetchData = async () => {
+            try {
+                const headers = {
+                    Authorization: `Bearer ${token}`,
+                };
+
+                // Fetch trash reports
+                const trashResponse = await axios.get(
+                    "http://localhost:5000/api/trash/all",
+                    { headers }
+                );
+                setTrashReports(trashResponse.data);
+
+                // Fetch users
+                const usersResponse = await axios.get(
+                    "http://localhost:5000/api/user/all",
+                    { headers }
+                );
+                setUsers(usersResponse.data);
+
+                // Fetch workers
+                const workersResponse = await axios.get(
+                    "http://localhost:5000/api/worker/all",
+                    { headers }
+                );
+                setWorkers(workersResponse.data);
+
+                // Update map center based on first trash report
+                if (trashResponse.data.length > 0) {
+                    const firstReport = trashResponse.data[0];
+                    setMapCenter([firstReport.latitude, firstReport.longitude]);
+                }
+            } catch (err) {
+                setError(err.response?.data?.message || "Error fetching data");
+                toast.error("Error fetching data");
+            } finally {
+                setLoading(false);
             }
-          }
-        );
-        
-        setAllTrash(trashRes.data);
-        
-        // Fetch all users
-        const usersRes = await axios.get(
-          "http://localhost:5000/api/user/all",
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        setAllUsers(usersRes.data);
-        
-        // Fetch all workers
-        const workersRes = await axios.get(
-          "http://localhost:5000/api/worker/all",
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        
-        setAllWorkers(workersRes.data);
-      } catch (err) {
-        console.error("Error fetching admin data:", err);
-        setError(err.response?.data?.message || "Failed to fetch admin data");
-      } finally {
-        setLoading(false);
-      }
+        };
+
+        fetchData();
+    }, [navigate]);
+
+    const handleAssignWorker = async () => {
+        if (!selectedWorker || !selectedTrash) {
+            toast.error("Please select both worker and trash report");
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem("token");
+            await axios.post(
+                "http://localhost:5000/api/worker/assign",
+                {
+                    workerId: selectedWorker,
+                    trashId: selectedTrash,
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            toast.success("Worker assigned successfully");
+            
+            // Refresh data
+            const headers = { Authorization: `Bearer ${token}` };
+            const [trashRes, workersRes] = await Promise.all([
+                axios.get("http://localhost:5000/api/trash/all", { headers }),
+                axios.get("http://localhost:5000/api/worker/all", { headers })
+            ]);
+            
+            setTrashReports(trashRes.data);
+            setWorkers(workersRes.data);
+            setSelectedWorker("");
+            setSelectedTrash("");
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Error assigning worker");
+        }
     };
 
-    fetchAdminData();
-  }, [navigate]);
-
-  const handleAssignWorker = async (trashId) => {
-    if (!selectedWorker) {
-      toast.error("Please select a worker first");
-      return;
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-100 p-8">
+                <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                </div>
+            </div>
+        );
     }
-    
-    try {
-      setAssigning(true);
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setError("Please login first");
-        navigate("/login");
-        return;
-      }
 
-      const res = await axios.post(
-        `http://localhost:5000/api/trash/assign/${trashId}`,
-        { workerId: selectedWorker },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-      
-      toast.success("Worker assigned successfully!");
-      
-      // Refresh the trash list
-      const updatedRes = await axios.get(
-        "http://localhost:5000/api/trash/all",
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-      
-      setAllTrash(updatedRes.data);
-      setSelectedWorker("");
-    } catch (err) {
-      console.error("Error assigning worker:", err);
-      toast.error(err.response?.data?.message || "Failed to assign worker");
-    } finally {
-      setAssigning(false);
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gray-100 p-8">
+                <div className="text-red-500 text-center">{error}</div>
+            </div>
+        );
     }
-  };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "pending":
-        return "text-yellow-600";
-      case "assigned":
-        return "text-blue-600";
-      case "completed":
-        return "text-green-600";
-      default:
-        return "text-gray-600";
-    }
-  };
+    return (
+        <div className="min-h-screen bg-gray-100 p-8">
+            <div className="max-w-7xl mx-auto">
+                <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
 
-  if (loading) {
-    return <div className="text-center mt-10">Loading admin dashboard...</div>;
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto mt-10 p-4">
-      <h2 className="text-2xl font-bold mb-6 text-green-700">Admin Dashboard</h2>
-      
-      {error && <p className="text-red-600 mb-4">{error}</p>}
-
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-4 text-gray-700">All Trash Reports</h3>
-        {allTrash.length === 0 ? (
-          <p className="text-gray-600">No trash reports found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border rounded-lg">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="py-2 px-4 border-b text-left">Image</th>
-                  <th className="py-2 px-4 border-b text-left">Location</th>
-                  <th className="py-2 px-4 border-b text-left">Reported By</th>
-                  <th className="py-2 px-4 border-b text-left">Status</th>
-                  <th className="py-2 px-4 border-b text-left">Assigned To</th>
-                  <th className="py-2 px-4 border-b text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allTrash.map((trash) => (
-                  <tr key={trash._id} className="hover:bg-gray-50">
-                    <td className="py-2 px-4 border-b">
-                      <img 
-                        src={trash.image} 
-                        alt="Trash" 
-                        className="w-16 h-16 object-cover rounded"
-                      />
-                    </td>
-                    <td className="py-2 px-4 border-b">{trash.location}</td>
-                    <td className="py-2 px-4 border-b">
-                      {allUsers.find(user => user._id === trash.reportedBy)?.name || "Unknown"}
-                    </td>
-                    <td className="py-2 px-4 border-b">
-                      <span className={getStatusColor(trash.status)}>
-                        {trash.status.charAt(0).toUpperCase() + trash.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="py-2 px-4 border-b">
-                      {trash.worker ? 
-                        allWorkers.find(worker => worker._id === trash.worker)?.name || "Unknown" : 
-                        "Not assigned"}
-                    </td>
-                    <td className="py-2 px-4 border-b">
-                      {trash.status !== "completed" && (
-                        <div className="flex items-center space-x-2">
-                          <select
-                            className="border rounded px-2 py-1 text-sm"
-                            value={selectedWorker}
-                            onChange={(e) => setSelectedWorker(e.target.value)}
-                            disabled={assigning}
-                          >
-                            <option value="">Select Worker</option>
-                            {allWorkers.map(worker => (
-                              <option key={worker._id} value={worker._id}>
-                                {worker.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => handleAssignWorker(trash._id)}
-                            className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
-                            disabled={assigning || !selectedWorker}
-                          >
-                            {assigning ? "Assigning..." : "Assign"}
-                          </button>
+                {/* Assignment Section */}
+                <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                    <h2 className="text-xl font-semibold mb-4">Assign Worker to Task</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Select Worker
+                            </label>
+                            <select
+                                value={selectedWorker}
+                                onChange={(e) => setSelectedWorker(e.target.value)}
+                                className="w-full p-2 border rounded-md"
+                            >
+                                <option value="">Select a worker</option>
+                                {workers.map((worker) => (
+                                    <option key={worker._id} value={worker._id}>
+                                        {worker.name} ({worker.email})
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Select Trash Report
+                            </label>
+                            <select
+                                value={selectedTrash}
+                                onChange={(e) => setSelectedTrash(e.target.value)}
+                                className="w-full p-2 border rounded-md"
+                            >
+                                <option value="">Select a trash report</option>
+                                {trashReports
+                                    .filter((report) => report.status === "pending")
+                                    .map((report) => (
+                                        <option key={report._id} value={report._id}>
+                                            {report.location} - {report.category}
+                                        </option>
+                                    ))}
+                            </select>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleAssignWorker}
+                        className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+                    >
+                        Assign Worker
+                    </button>
+                </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-700">Users</h3>
-          {allUsers.length === 0 ? (
-            <p className="text-gray-600">No users found.</p>
-          ) : (
-            <div className="bg-white border rounded-lg overflow-hidden">
-              <table className="min-w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="py-2 px-4 border-b text-left">Name</th>
-                    <th className="py-2 px-4 border-b text-left">Email</th>
-                    <th className="py-2 px-4 border-b text-left">Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allUsers.map(user => (
-                    <tr key={user._id} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 border-b">{user.name}</td>
-                      <td className="py-2 px-4 border-b">{user.email}</td>
-                      <td className="py-2 px-4 border-b">{user.points || 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                {/* Statistics Section */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <div className="flex items-center">
+                            <FaTrash className="text-blue-500 text-2xl mr-3" />
+                            <div>
+                                <h3 className="text-lg font-semibold">Total Reports</h3>
+                                <p className="text-3xl font-bold">{trashReports.length}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <div className="flex items-center">
+                            <FaUser className="text-green-500 text-2xl mr-3" />
+                            <div>
+                                <h3 className="text-lg font-semibold">Total Users</h3>
+                                <p className="text-3xl font-bold">{users.length}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <div className="flex items-center">
+                            <FaUserTie className="text-purple-500 text-2xl mr-3" />
+                            <div>
+                                <h3 className="text-lg font-semibold">Total Workers</h3>
+                                <p className="text-3xl font-bold">{workers.length}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-gray-700">Workers</h3>
-          {allWorkers.length === 0 ? (
-            <p className="text-gray-600">No workers found.</p>
-          ) : (
-            <div className="bg-white border rounded-lg overflow-hidden">
-              <table className="min-w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="py-2 px-4 border-b text-left">Name</th>
-                    <th className="py-2 px-4 border-b text-left">Email</th>
-                    <th className="py-2 px-4 border-b text-left">Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allWorkers.map(worker => (
-                    <tr key={worker._id} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 border-b">{worker.name}</td>
-                      <td className="py-2 px-4 border-b">{worker.email}</td>
-                      <td className="py-2 px-4 border-b">{worker.points || 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                {/* Map Section */}
+                <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+                    <h2 className="text-xl font-semibold mb-4">Trash Locations</h2>
+                    <div className="h-96">
+                        <MapContainer
+                            center={mapCenter}
+                            zoom={5}
+                            style={{ height: "100%", width: "100%" }}
+                        >
+                            <TileLayer
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            />
+                            {trashReports.map((report) => (
+                                <Marker
+                                    key={report._id}
+                                    position={[report.latitude, report.longitude]}
+                                >
+                                    <Popup>
+                                        <div>
+                                            <p className="font-semibold">{report.location}</p>
+                                            <p>Category: {report.category}</p>
+                                            <p>Status: {report.status}</p>
+                                            <p>Reported by: {report.reportedBy?.name || "Unknown"}</p>
+                                        </div>
+                                    </Popup>
+                                </Marker>
+                            ))}
+                        </MapContainer>
+                    </div>
+                </div>
+
+                {/* Recent Reports Section */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                    <h2 className="text-xl font-semibold mb-4">Recent Reports</h2>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Location
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Category
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Status
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Reported By
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Date
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {trashReports.slice(0, 5).map((report) => (
+                                    <tr key={report._id}>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <FaMapMarkerAlt className="text-gray-400 mr-2" />
+                                                {report.location}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {report.category}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span
+                                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                    report.status === "completed"
+                                                        ? "bg-green-100 text-green-800"
+                                                        : report.status === "pending"
+                                                        ? "bg-yellow-100 text-yellow-800"
+                                                        : "bg-blue-100 text-blue-800"
+                                                }`}
+                                            >
+                                                {report.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {report.reportedBy?.name || "Unknown"}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {new Date(report.createdAt).toLocaleDateString()}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-          )}
         </div>
-      </div>
-    </div>
-  );
-} 
+    );
+};
+
+export default AdminDashboard; 
